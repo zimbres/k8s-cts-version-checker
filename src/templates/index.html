@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K8s Version Dashboard</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #7d8590;
+      --primary: #6366f1;
+      --primary-h: #4f46e5;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --r: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 1.05rem; font-weight: 600; flex: 1; }
+    #last-scan { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 28px 0;
+      flex-wrap: wrap;
+    }
+    .toolbar label { font-size: 0.8rem; color: var(--muted); }
+
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: var(--r);
+      font-size: 0.875rem;
+      min-width: 240px;
+      cursor: pointer;
+      outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237d8590' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+    select:focus { border-color: var(--primary); }
+
+    .btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 7px 18px;
+      border-radius: var(--r);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--primary-h); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Stats ── */
+    .stats {
+      display: flex;
+      gap: 14px;
+      padding: 20px 28px;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 14px 22px;
+      flex: 1;
+      min-width: 130px;
+      max-width: 180px;
+    }
+    .card .lbl {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+    .card .val { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .card.c-all .val  { color: var(--text); }
+    .card.c-out .val  { color: var(--red); }
+    .card.c-ok  .val  { color: var(--green); }
+    .card.c-dep .val  { color: var(--yellow); }
+    .card.c-err .val  { color: var(--yellow); }
+
+    /* ── Content ── */
+    .content { padding: 0 28px 40px; }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .bar input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: var(--r);
+      font-size: 0.875rem;
+      width: 280px;
+      outline: none;
+    }
+    .bar input::placeholder { color: var(--muted); }
+    .bar input:focus { border-color: var(--primary); }
+
+    .pills { display: flex; gap: 6px; }
+    .pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 13px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pill:hover { border-color: var(--primary); color: var(--text); }
+    .pill.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    /* ── Table ── */
+    .tbl-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sorted { color: var(--primary); }
+    thead th .arr { margin-left: 3px; font-size: 0.65rem; }
+
+    tbody td {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:hover td { background: var(--surface2); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 3px 0;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      width: 90px;
+    }
+    .badge.out { background: rgba(248,81,73,.15); color: #f85149; }
+    .badge.ok  { background: rgba(63,185,80,.15); color: #3fb950; }
+    .badge.dep { background: rgba(210,153,34,.15); color: #d29922; }
+    .badge.err { background: rgba(210,153,34,.15); color: #d29922; }
+
+    .vtag {
+      font-family: "Cascadia Code", "Fira Mono", monospace;
+      font-size: 0.78rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 7px;
+      white-space: nowrap;
+    }
+    .vtag.new { border-color: rgba(63,185,80,.45); color: #3fb950; }
+
+    /* ── Empty / Error ── */
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty svg { opacity: .25; margin-bottom: 14px; }
+    .empty h3 { font-size: 0.95rem; margin-bottom: 6px; color: var(--text); }
+    .empty p  { font-size: 0.82rem; }
+
+    .err-box {
+      background: rgba(248,81,73,.1);
+      border: 1px solid rgba(248,81,73,.3);
+      color: #f85149;
+      padding: 10px 14px;
+      border-radius: var(--r);
+      margin-bottom: 14px;
+      font-size: 0.85rem;
+    }
+
+    /* ── Registry error panel ── */
+    .reg-err-panel {
+      background: rgba(210,153,34,.08);
+      border: 1px solid rgba(210,153,34,.35);
+      border-radius: var(--r);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .reg-err-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--yellow);
+    }
+    .reg-err-header:hover { background: rgba(210,153,34,.06); }
+    .reg-err-header .arr { margin-left: auto; font-size: 0.7rem; transition: transform 0.2s; }
+    .reg-err-header.open .arr { transform: rotate(180deg); }
+    .reg-err-body { display: none; padding: 0 14px 10px; }
+    .reg-err-body.open { display: block; }
+    .reg-err-item {
+      padding: 8px 0;
+      border-top: 1px solid rgba(210,153,34,.2);
+    }
+    .reg-err-item:first-child { border-top: none; }
+    .reg-err-img {
+      font-family: "Cascadia Code", "Fira Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .reg-err-msg {
+      font-size: 0.76rem;
+      color: var(--muted);
+      word-break: break-all;
+    }
+
+    /* ── Spinner ── */
+    .spin {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rot .65s linear infinite;
+    }
+    @keyframes rot { to { transform: rotate(360deg); } }
+
+    .ns-tag {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .ns-tag:hover { border-color: var(--primary); color: var(--text); }
+    .ns-tag.active { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.12); }
+
+    .ns-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(99,102,241,.15);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .ns-chip button {
+      background: none;
+      border: none;
+      color: var(--primary);
+      cursor: pointer;
+      padding: 0;
+      font-size: 0.85rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+    }
+    .ns-chip button:hover { color: var(--text); background: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <!-- K8s wheel icon -->
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <circle cx="14" cy="14" r="13" stroke="#6366f1" stroke-width="1.8"/>
+    <circle cx="14" cy="14" r="3.5" fill="#6366f1"/>
+    <line x1="14" y1="1" x2="14" y2="7"    stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="14" y1="21" x2="14" y2="27"  stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="1"  y1="14" x2="7"  y2="14"  stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="21" y1="14" x2="27" y2="14"  stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="4.2" y1="4.2"   x2="8.5" y2="8.5"   stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="19.5" y1="19.5" x2="23.8" y2="23.8" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="23.8" y1="4.2"  x2="19.5" y2="8.5"  stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="8.5"  y1="19.5" x2="4.2"  y2="23.8" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>
+  <h1>Kubernetes Containers Version Dashboard</h1>
+  <span id="last-scan"></span>
+</header>
+
+<div class="toolbar">
+  <label for="ctx-sel">Context</label>
+  <select id="ctx-sel"></select>
+  <button class="btn" id="scan-btn" onclick="runScan()">
+    <span id="btn-ico">&#9654;</span>
+    <span id="btn-txt">Scan</span>
+  </button>
+</div>
+
+<div class="stats">
+  <div class="card c-all"><div class="lbl">Total</div><div class="val" id="s-all">—</div></div>
+  <div class="card c-out"><div class="lbl">Outdated</div><div class="val" id="s-out">—</div></div>
+  <div class="card c-ok" ><div class="lbl">Up to Date</div><div class="val" id="s-ok">—</div></div>
+  <div class="card c-err" id="s-err-card" style="display:none"><div class="lbl">Reg. Errors</div><div class="val" id="s-err">0</div></div>
+</div>
+
+<div class="content">
+  <div id="err"></div>
+
+  <div class="bar">
+    <input id="q" type="text" placeholder="Search namespace, workload, container…" oninput="render()">
+    <div id="ns-chip-wrap"></div>
+    <div class="pills">
+      <span class="pill on" data-f="all"      onclick="setF('all')">All</span>
+      <span class="pill"    data-f="outdated" onclick="setF('outdated')">Outdated</span>
+      <span class="pill"    data-f="current"  onclick="setF('current')">Current</span>
+    </div>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortBy('namespace',event)">Namespace <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('kind',event)">Kind <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('workload',event)">Workload <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('container',event)">Container <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('image',event)">Image <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('current',event)">Current <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('latest',event)">Latest <span class="arr">&#8597;</span></th>
+          <th onclick="sortBy('status',event)">Status <span class="arr">&#8597;</span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let rows = [];
+  let imageCount = 0;
+  let outdatedImageCount = 0;
+  let filt = 'all';
+  let nsFilter = '';
+  let sortCol = 'status';
+  let sortAsc = false;
+
+  // ── Bootstrap ──────────────────────────────────────────────────
+  (async function init() {
+    const sel = document.getElementById('ctx-sel');
+    sel.innerHTML = '<option value="">Loading contexts…</option>';
+    try {
+      const r = await fetch('/api/contexts');
+      const d = await r.json();
+      sel.innerHTML = '';
+      if (!d.contexts || d.contexts.length === 0) {
+        sel.innerHTML = '<option value="">No contexts found</option>';
+      } else {
+        d.contexts.forEach(c => {
+          const o = document.createElement('option');
+          o.value = o.textContent = c;
+          if (c === d.current) o.selected = true;
+          sel.appendChild(o);
+        });
+      }
+    } catch {
+      sel.innerHTML = '<option value="">Could not reach backend</option>';
+    }
+    render();
+  })();
+
+  // ── Scan ──────────────────────────────────────────────────────
+  async function runScan() {
+    const ctx = document.getElementById('ctx-sel').value;
+    const btn = document.getElementById('scan-btn');
+    btn.disabled = true;
+    document.getElementById('btn-ico').innerHTML = '<span class="spin"></span>';
+    document.getElementById('btn-txt').textContent = 'Scanning…';
+    document.getElementById('err').innerHTML = '';
+    showRegErrors([]);
+
+    try {
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: ctx }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showErr(data.error || 'Scan failed');
+        return;
+      }
+
+      // nova --containers output: root key is "container_images"
+      // Each image may affect multiple workloads — expand into one row each
+      const images = data.container_images || [];
+      const errImages = data.err_images || [];
+      imageCount = images.length + errImages.length;
+      outdatedImageCount = images.filter(i => i.outdated).length;
+
+      rows = [];
+      for (const img of images) {
+        const workloads = img.affectedWorkloads || [];
+        const base = {
+          image:   img.name            || '',
+          current: img.current_version || '—',
+          latest:  img.latest_version  || '—',
+          outdated: !!img.outdated,
+          errored:  false,
+          status:   img.outdated ? 1 : 0,
+        };
+        if (workloads.length === 0) {
+          rows.push({ ...base, namespace: '', kind: '', workload: '', container: '' });
+        } else {
+          for (const wl of workloads) {
+            rows.push({
+              ...base,
+              namespace: wl.namespace || '',
+              kind:      wl.kind      || '',
+              workload:  wl.name      || '',
+              container: wl.container || '',
+            });
+          }
+        }
+      }
+
+      // Errored images — workloads enriched by backend via kubectl
+      for (const e of errImages) {
+        const img = e.Image || '';
+        const colonIdx = img.lastIndexOf(':');
+        const current = colonIdx > img.lastIndexOf('/') ? img.slice(colonIdx + 1) : '—';
+        const imageName = colonIdx > img.lastIndexOf('/') ? img.slice(0, colonIdx) : img;
+        const base = {
+          image: imageName, current, latest: 'Unknown',
+          outdated: false, errored: true, status: -1,
+        };
+        const workloads = e.affectedWorkloads || [];
+        if (workloads.length === 0) {
+          rows.push({ ...base, namespace: '', kind: '', workload: '', container: '' });
+        } else {
+          for (const wl of workloads) {
+            rows.push({
+              ...base,
+              namespace: wl.namespace || '',
+              kind:      wl.kind      || '',
+              workload:  wl.name      || '',
+              container: wl.container || '',
+            });
+          }
+        }
+      }
+
+      updateStats();
+      render();
+      showRegErrors(data.err_images || []);
+
+      const now = new Date();
+      document.getElementById('last-scan').textContent =
+        `Last scan: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+
+    } catch (e) {
+      showErr('Cannot reach backend — is app.py running? ' + e.message);
+    } finally {
+      btn.disabled = false;
+      document.getElementById('btn-ico').textContent = '▶';
+      document.getElementById('btn-txt').textContent = 'Scan';
+    }
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────
+  function updateStats() {
+    // Stats count unique images, not expanded workload rows
+    document.getElementById('s-all').textContent = imageCount;
+    document.getElementById('s-out').textContent = outdatedImageCount;
+    document.getElementById('s-ok').textContent  = imageCount - outdatedImageCount;
+  }
+
+  // ── Registry errors ───────────────────────────────────────────
+  function showRegErrors(errImages) {
+    const errCard = document.getElementById('s-err-card');
+    if (!errImages || errImages.length === 0) {
+      errCard.style.display = 'none';
+      const existing = document.getElementById('reg-err-panel');
+      if (existing) existing.remove();
+      return;
+    }
+
+    document.getElementById('s-err').textContent = errImages.length;
+    errCard.style.display = '';
+
+    const items = errImages.map(e => `
+      <div class="reg-err-item">
+        <div class="reg-err-img">${esc(e.Image)}</div>
+        <div class="reg-err-msg">${esc(e.Err)}</div>
+      </div>`).join('');
+
+    const panel = `
+      <div class="reg-err-panel" id="reg-err-panel">
+        <div class="reg-err-header" onclick="toggleRegErr(this)">
+          &#9888;&nbsp; ${errImages.length} image${errImages.length > 1 ? 's' : ''} could not be checked — registry connection error
+          <span class="arr">&#9660;</span>
+        </div>
+        <div class="reg-err-body">${items}</div>
+      </div>`;
+
+    const existing = document.getElementById('reg-err-panel');
+    if (existing) existing.outerHTML = panel;
+    else document.getElementById('err').insertAdjacentHTML('afterend', panel);
+  }
+
+  function toggleRegErr(header) {
+    header.classList.toggle('open');
+    header.nextElementSibling.classList.toggle('open');
+  }
+
+  // ── Filter ────────────────────────────────────────────────────
+  function setF(f) {
+    filt = f;
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('on', p.dataset.f === f));
+    render();
+  }
+
+  function filterNS(ns) {
+    nsFilter = nsFilter === ns ? '' : ns;
+    render();
+  }
+
+  function clearNS() {
+    nsFilter = '';
+    render();
+  }
+
+  function updateNSChip() {
+    const wrap = document.getElementById('ns-chip-wrap');
+    if (nsFilter) {
+      wrap.innerHTML = `<span class="ns-chip">
+        <span>${esc(nsFilter)}</span>
+        <button onclick="clearNS()" title="Clear namespace filter">&#x2715;</button>
+      </span>`;
+    } else {
+      wrap.innerHTML = '';
+    }
+  }
+
+  // ── Sort ──────────────────────────────────────────────────────
+  function sortBy(col, e) {
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = true; }
+    document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+    e.currentTarget.classList.add('sorted');
+    render();
+  }
+
+  // ── Render ────────────────────────────────────────────────────
+  function render() {
+    const q = (document.getElementById('q')?.value || '').toLowerCase();
+
+    updateNSChip();
+
+    let data = rows.filter(r => {
+      if (filt === 'outdated' && !r.outdated) return false;
+      if (filt === 'current'  && (r.outdated || r.errored)) return false;
+      if (nsFilter && r.namespace !== nsFilter)  return false;
+      if (q) return [r.namespace, r.kind, r.workload, r.container, r.image, r.current, r.latest]
+        .some(v => v.toLowerCase().includes(q));
+      return true;
+    });
+
+    data = [...data].sort((a, b) => {
+      let va = a[sortCol], vb = b[sortCol];
+      if (typeof va === 'number' || typeof va === 'boolean') {
+        va = Number(va); vb = Number(vb);
+        return sortAsc ? va - vb : vb - va;
+      }
+      va = String(va).toLowerCase();
+      vb = String(vb).toLowerCase();
+      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+
+    const tbody = document.getElementById('tbody');
+
+    if (data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8">
+        <div class="empty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <h3>${rows.length === 0 ? 'No data yet' : 'No matches found'}</h3>
+          <p>${rows.length === 0
+            ? 'Select a context and click <strong>Scan</strong> to begin.'
+            : 'Try adjusting your search query or filter.'}</p>
+        </div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map(r => {
+      const badge = r.errored
+        ? `<span class="badge err">&#9888; Error</span>`
+        : r.outdated
+          ? `<span class="badge out">&#8593; Outdated</span>`
+          : `<span class="badge ok">&#10003; Current</span>`;
+
+      const latestCls = r.outdated ? ' new' : '';
+      const latestVal = r.errored
+        ? `<span class="vtag" style="color:var(--yellow);border-color:rgba(210,153,34,.45)">Unknown</span>`
+        : `<span class="vtag${latestCls}">${esc(r.latest)}</span>`;
+
+      return `<tr>
+        <td><span class="ns-tag${r.namespace === nsFilter && nsFilter ? ' active' : ''}" onclick="filterNS('${esc(r.namespace)}')">${esc(r.namespace) || '—'}</span></td>
+        <td style="color:var(--muted)">${esc(r.kind) || '—'}</td>
+        <td><strong>${esc(r.workload) || '—'}</strong></td>
+        <td>${esc(r.container) || '—'}</td>
+        <td style="color:var(--muted);font-size:0.78rem">${esc(r.image) || '—'}</td>
+        <td><span class="vtag">${esc(r.current)}</span></td>
+        <td>${latestVal}</td>
+        <td>${badge}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function showErr(msg) {
+    document.getElementById('err').innerHTML =
+      `<div class="err-box">&#9888;&nbsp; ${esc(msg)}</div>`;
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>

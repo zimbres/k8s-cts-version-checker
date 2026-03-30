@@ -1,0 +1,19 @@
+services:
+  version-checker:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      # Kubeconfig — required for kubectl calls and context listing
+      - ${KUBECONFIG:-~/.kube/config}:/root/.kube/config:ro
+    environment:
+      # ── Private registry credentials ──────────────────────────────────────
+      # Add as many registries as needed (REG_1 … REG_9).
+      # Values can be set here or overridden in a .env file next to this file.
+      - REG_1_URL=${REG_1_URL:-}
+      - REG_1_USER=${REG_1_USER:-}
+      - REG_1_PASS=${REG_1_PASS:-}
+      - REG_2_URL=${REG_2_URL:-}
+      - REG_2_USER=${REG_2_USER:-}
+      - REG_2_PASS=${REG_2_PASS:-}
+    restart: unless-stopped
